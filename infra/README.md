@@ -29,7 +29,7 @@ Make sure to build the [ETL package](../etl/README.md)
 docker compose exec pyspark ./bin/spark-submit \
     --master 'local[2]' \
     --py-files /opt/spark/custom/dist/apps-0.1.0.tar.gz \
-    /opt/spark/custom/src/apps/people_data/create_table.py \
+    /opt/spark/custom/src/apps/load_people/create_table.py \
     --from_id 1000000 --to_id 2000000
 ```
 
