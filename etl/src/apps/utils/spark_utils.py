@@ -1,7 +1,7 @@
-import os
 import pyspark
 from pyspark.conf import SparkConf
 from pyspark.sql import SparkSession
+from apps.utils.constants import CATALOG_URL, WAREHOUSE
 
 
 SPARK_CATALOG = "lakekeeper"
