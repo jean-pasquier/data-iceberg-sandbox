@@ -1,0 +1,15 @@
+services:
+
+  pyspark:
+    build:
+      context: ./pyspark
+    pull_policy: never
+    # Mount out ETL code into container
+    volumes:
+      - ../etl:/opt/spark/custom/
+    environment:
+      - CATALOG_URL=http://lakekeeper:8181/catalog
+      - PYTHONPATH=/opt/spark/custom/src  # fixes module apps not found
+    # Make container idle to allow executing commands afterward
+    tty: true
+    entrypoint: /bin/sh
