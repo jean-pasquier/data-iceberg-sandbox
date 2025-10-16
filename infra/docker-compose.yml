@@ -65,8 +65,8 @@ services:
     image: quay.io/lakekeeper/catalog:v0.10.3
     environment: &lakekeeper-env
       - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
-      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://lakekeeper-user:lakekeeper-pwd@postgres:5432/lakekeeper
-      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://lakekeeper-user:lakekeeper-pwd@postgres:5432/lakekeeper
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://lakekeeper-user:lakekeeper-pwd@lakekeeper-db:5432/lakekeeper
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://lakekeeper-user:lakekeeper-pwd@lakekeeper-db:5432/lakekeeper
       - RUST_LOG=trace,axum=trace,sqlx=trace,lakekeeper=trace
     command: [ "migrate" ]
     restart: "no"
