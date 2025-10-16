@@ -21,8 +21,8 @@ services:
       retries: 5
 
 
-  ### Backend application ###
-  nimtable-back:
+  ### Backend application (name cannot be changed due to proxying) ###
+  nimtable:
     image: ghcr.io/nimtable/nimtable:nightly
     pull_policy: missing
     restart: unless-stopped
@@ -51,4 +51,4 @@ services:
       - ADMIN_USERNAME=admin-user
       - ADMIN_PASSWORD=admin-pwd
     depends_on:
-      - nimtable-back
+      - nimtable
