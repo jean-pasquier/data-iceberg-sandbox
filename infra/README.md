@@ -33,7 +33,9 @@ docker compose exec pyspark ./bin/spark-submit \
     --from_id 1000000 --to_id 2000000
 ```
 
-We can now query the data with Trino
+Run several times the spark job to create several iceberg snapshots (eg versions). Visit [Nimtable UI](http://localhost:3000) and check that table has been loaded (Data > Tables > `people_partitioned`) and number of records has increased (`Version Control` tab). Run the `Optimize table` to run compaction job (one time or scheduled) to solve data lake small files issue. The UI allows to preview data and running SQL queries. 
+
+We can also query the data with Trino query engine.
 
 ```shell
 # 1. Spin up Trino query engine
