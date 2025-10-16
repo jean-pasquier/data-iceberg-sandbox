@@ -1,0 +1,54 @@
+volumes:
+  nimtable-postgres:
+
+
+services:
+
+  ### Postgres to store Nimtable data ###
+  nimtable-db:
+    image: postgres:17
+    restart: unless-stopped
+    volumes:
+      - nimtable-postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: nimtable-user
+      POSTGRES_PASSWORD: nimtable-pwd
+      POSTGRES_DB: nimtable
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U nimtable-user -d nimtable" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+
+  ### Backend application ###
+  nimtable-back:
+    image: ghcr.io/nimtable/nimtable:nightly
+    pull_policy: missing
+    restart: unless-stopped
+    depends_on:
+      nimtable-db:
+        condition: service_healthy
+    ports:
+      - "8182:8182"
+    volumes:
+      - ./nimtable-config.yaml:/nimtable/config.yaml
+    environment:
+      JAVA_OPTS: -Xmx32g -Xms512m
+
+
+  ### Frontend application (Next.js) ###
+  nimtable-web:
+    image: ghcr.io/nimtable/nimtable-web:nightly
+    pull_policy: missing
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - JAVA_API_URL=http://nimtable:8182
+      - DATABASE_URL=postgresql://nimtable-user:nimtable-pwd@nimtable-db:5432/nimtable
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - ADMIN_USERNAME=admin-user
+      - ADMIN_PASSWORD=admin-pwd
+    depends_on:
+      - nimtable-back
