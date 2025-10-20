@@ -48,10 +48,25 @@ def generate_data(from_id: int, to_id: int) -> list:
 
 
 def add_fields(df: DataFrame) -> DataFrame:
-    return df.withColumn(
-        "category",
-        f.when(f.col("age") < 15, f.lit("young")).when(f.col("age") < 60, f.lit("adult")).otherwise(f.lit("senior")),
-    ).withColumn("birth", f.lit(2025) - f.col("age"))
+    """Add some calculated fields"""
+    return (
+        df.withColumn(
+            "category",
+            f.when(f.col("age") < 15, f.lit("young"))
+            .when(f.col("age") < 60, f.lit("adult"))
+            .otherwise(f.lit("senior")),
+        )
+        .withColumn("birth", f.lit(2025) - f.col("age"))
+        .withColumn("created_at", f.current_timestamp())  # if id already exists, it won't be updated, cf. `get_upsert_assignment`
+        .withColumn("updated_at", f.col("created_at"))
+    )
+
+
+def get_upsert_assignment(columns: list[str]) -> dict:
+    exclude_columns = ("id", "created_at")
+    updated_columns = {column: f.col(f"source.{column}") for column in columns if column not in exclude_columns}
+    print(f"Running upsert by updating following columns values (all except: {', '.join(exclude_columns)}): {list(updated_columns.keys())}")
+    return updated_columns
 
 
 if __name__ == "__main__":
@@ -71,12 +86,21 @@ if __name__ == "__main__":
     sdf = spark.createDataFrame(data, "id: long, name: string, age: int")
     sdf = add_fields(sdf)
 
-    if spark.catalog.tableExists(TABLE_PATH):
-        print("Table already exists, appending new data")
-        sdf.writeTo(TABLE_PATH).partitionedBy(f.col("category")).append()
-    else:
+    spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {NAMESPACE};")
+
+    if not spark.catalog.tableExists(TABLE_PATH):
         print("Table does not exist, creating from the data")
         sdf.writeTo(TABLE_PATH).partitionedBy(f.col("category")).create()
+    else:
+        print("Table already exists, upsetting new data")
+        (
+            sdf.alias("source")
+            .mergeInto(table=TABLE_PATH, condition=f.col("source.id") == f.col(f"{TABLE_PATH}.id"))
+            .whenNotMatched()
+            .insertAll()
+            .whenMatched()
+            .update(get_upsert_assignment(sdf.columns))
+        ).merge()
 
     print("Data written, stopping")
     spark.stop()
