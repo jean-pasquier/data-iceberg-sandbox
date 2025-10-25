@@ -5,18 +5,21 @@ server:
   host: 0.0.0.0
 
 database:
-  url: jdbc:postgresql://nimtable-db:5432/nimtable
-  username: nimtable-user
-  password: nimtable-pwd
+  url: jdbc:postgresql://nimtable-db:5432/postgres
+  username: postgres
+  password: nimtable
 
 catalogs:
   - name: lakekeeper
     type: rest
     uri: http://lakekeeper:8181/catalog
-    warehouse: test-iceberg
+    credential: "nimtable:SfpAYz9NswFTDYZaeeLk1gWXx2dcRVIj"
+    oauth2-server-uri: "http://keycloak:8080/realms/iceberg/protocol/openid-connect/token"
+    scope: lakekeeper
+    warehouse: test-warehouse
     io-impl: org.apache.iceberg.aws.s3.S3FileIO
     s3.endpoint: http://minio:9000
     s3.access-key-id: minio-root-user
-    s3.secret-access-key: minio-root-pwd
+    s3.secret-access-key: minio-root-password
     s3.region: local-01
     s3.path-style-access: true

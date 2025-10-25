@@ -1,42 +1,108 @@
 volumes:
-  minio:
+  openfga-postgres:
+  keycloak-postgres:
   lakekeeper-postgres:
+  nimtable-postgres:
+  minio:
 
 
 services:
 
-  ### Postgres to store lakekeeper data ###
-  lakekeeper-db:
+  ### Open FGA ###
+
+  openfga-db:
     image: postgres:17
     environment:
-      - POSTGRES_DB=lakekeeper
-      - POSTGRES_USER=lakekeeper-user
-      - POSTGRES_PASSWORD=lakekeeper-pwd
+      - POSTGRES_PASSWORD=openfga
     volumes:
-      - lakekeeper-postgres:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    restart: unless-stopped
+      - openfga-postgres:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U lakekeeper-user -p 5432 -d lakekeeper" ]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -p 5432 -d postgres" ]
       interval: 2s
       timeout: 10s
       retries: 2
       start_period: 10s
 
+  openfga-migrate:
+    image: openfga/openfga:v1.8
+    command: migrate
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgres://postgres:openfga@openfga-db:5432/postgres?sslmode=disable
+    depends_on:
+      openfga-db:
+        condition: service_healthy
 
-  ### MinIO as S3 LakeHouse storage (store data in iceberg format) ###
+  openfga:
+    image: openfga/openfga:v1.8
+    command: run
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgres://postgres:openfga@openfga-db:5432/postgres?sslmode=disable
+      - OPENFGA_DATASTORE_MAX_OPEN_CONNS=50
+      - OPENFGA_PLAYGROUND_ENABLED=false
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=openfga:8081"]
+      interval: 5s
+      timeout: 30s
+      retries: 3
+    depends_on:
+      openfga-db:
+        condition: service_healthy
+      openfga-migrate:
+        condition: service_completed_successfully
+
+
+  ### Keycloak ###
+
+  keycloak-db:
+    image: postgres:17
+    environment:
+      - POSTGRES_PASSWORD=keycloak
+    volumes:
+      - keycloak-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -p 5432 -d postgres" ]
+      interval: 2s
+      timeout: 10s
+      retries: 2
+      start_period: 10s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://keycloak-db/postgres
+      - KC_DB_USERNAME=postgres
+      - KC_DB_PASSWORD=keycloak
+    volumes:
+      - ./keycloak-realm.json:/opt/keycloak/data/import/realm.json
+    ports:
+      - "30080:8080"
+    command: [ "start-dev", "--metrics-enabled=true", "--health-enabled=true", "--import-realm", "--verbose", "--log-level=INFO", "--features=token-exchange" ]
+    healthcheck:
+      test: [ "CMD-SHELL", 'exec 3<>/dev/tcp/127.0.0.1/8080;echo -e "GET /realms/master/.well-known/openid-configuration HTTP/1.1\r\nhost: 127.0.0.1:8080\r\nConnection: close\r\n\r\n" >&3;grep "jwks_uri"  <&3' ]
+      interval: 5s
+      timeout: 15s
+      retries: 3
+      start_period: 120s
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+
+
+  ### Minio ###
+
   minio:
     image: minio/minio:RELEASE.2025-07-23T15-54-02Z
     environment:
       - MINIO_ROOT_USER=minio-root-user
-      - MINIO_ROOT_PASSWORD=minio-root-pwd
-    command: [ "server", "--console-address", ":9001", "/data" ]
+      - MINIO_ROOT_PASSWORD=minio-root-password
     volumes:
       - minio:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    command: [ "server", "--console-address", ":9001", "/data" ]
     healthcheck:
       test: [ "CMD", "mc", "ready", "local" ]
       interval: 2s
@@ -44,9 +110,7 @@ services:
       retries: 2
       start_period: 15s
 
-
-  ### Job: create MinIO bucket ###
-  init-minio:
+  minio-init:
     image: minio/minio:RELEASE.2025-07-23T15-54-02Z
     depends_on:
       minio:
@@ -55,88 +119,297 @@ services:
     entrypoint: >
       /bin/sh -c "
       sleep 5;
-      /usr/bin/mc alias set dockerminio http://minio:9000 minio-root-user minio-root-pwd;
-      /usr/bin/mc mb --ignore-existing dockerminio/poc-data-warehouse;
+      /usr/bin/mc alias set minio http://minio:9000 minio-root-user minio-root-password;
+      /usr/bin/mc mb minio/bucket-test-iceberg-datalake;
       exit 0;
       "
+  
+  
 
-  ### Job: run lakekeeper SQL migration on postgres ###
-  migrate:
+  ### Lakekeeper ###
+
+  lakekeeper-db:
+    image: postgres:17
+    environment:
+      - POSTGRES_PASSWORD=lakekeeper
+    volumes:
+      - lakekeeper-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -p 5432 -d postgres" ]
+      interval: 2s
+      timeout: 10s
+      retries: 2
+      start_period: 10s
+
+  lakekeeper-migrate:
     image: quay.io/lakekeeper/catalog:v0.10.3
-    environment: &lakekeeper-env
+    environment:
       - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
-      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://lakekeeper-user:lakekeeper-pwd@lakekeeper-db:5432/lakekeeper
-      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://lakekeeper-user:lakekeeper-pwd@lakekeeper-db:5432/lakekeeper
-      - RUST_LOG=trace,axum=trace,sqlx=trace,lakekeeper=trace
-    command: [ "migrate" ]
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:lakekeeper@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:lakekeeper@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__AUTHZ_BACKEND=openfga
+      - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga:8081
+      - RUST_LOG=info
     restart: "no"
+    entrypoint: [ "/home/nonroot/lakekeeper", "migrate" ]
     depends_on:
       lakekeeper-db:
         condition: service_healthy
+      openfga:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
 
-
-  ### Lakekeeper Iceberg REST catalog ###
   lakekeeper:
     image: quay.io/lakekeeper/catalog:v0.10.3
-    environment: *lakekeeper-env
+    environment:
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:lakekeeper@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:lakekeeper@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__AUTHZ_BACKEND=openfga
+      - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga:8081
+      - LAKEKEEPER__OPENID_PROVIDER_URI=http://keycloak:8080/realms/iceberg
+      - LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS=http://localhost:30080/realms/iceberg
+      - LAKEKEEPER__OPENID_AUDIENCE=lakekeeper
+      - LAKEKEEPER__UI__OPENID_CLIENT_ID=lakekeeper
+      - LAKEKEEPER__UI__OPENID_PROVIDER_URI=http://localhost:30080/realms/iceberg
+      - RUST_LOG=info
     command: [ "serve" ]
-    ports:
-      - "8181:8181"
     healthcheck:
       test: [ "CMD", "/home/nonroot/lakekeeper", "healthcheck" ]
       interval: 1s
       timeout: 10s
       retries: 3
       start_period: 3s
+    ports:
+      - "8181:8181"
     depends_on:
-      migrate:
+      lakekeeper-migrate:
         condition: service_completed_successfully
       lakekeeper-db:
         condition: service_healthy
       minio:
         condition: service_healthy
-      init-minio:
-        condition: service_completed_successfully
 
-
-  ### Job: bootstrap lakekeeper ###
-  bootstrap-lakekeeper:
-    image: curlimages/curl
-    depends_on:
-      lakekeeper:
-        condition: service_healthy
+  lakekeeper-init:
+    image: badouralix/curl-jq-yq:ubuntu
     restart: "no"
-    command:
-      - "-X"
-      - "POST"
-      - "-v"
-      - "http://lakekeeper:8181/management/v1/bootstrap"
-      - "-H"
-      - "Content-Type: application/json"
-      - "--data"
-      - '{"accept-terms-of-use": true}'
-
-
-  ### Job: create first 'warehouse' pointing to MinIO (see init-warehouse.json) ###
-  init-warehouse:
-    image: curlimages/curl
-    command:
-      - -w
-      - "%{http_code}"
-      - "-X"
-      - "POST"
-      - "-v"
-      - "http://lakekeeper:8181/management/v1/warehouse"
-      - "-H"
-      - "Content-Type: application/json"
-      - "--data"
-      - "@create-init-warehouse.json"
-      - "-o"
-      - "/dev/null"
-    volumes:
-      - ./init-warehouse.json:/home/curl_user/create-init-warehouse.json
+    environment:
+      - CLIENT_ID=lakekeeper-operator
+      - CLIENT_SECRET=bvMiebZ23atcNaE703kKWb2zTQSl1mGE
+    entrypoint: >
+      /bin/sh -c '      
+      
+      ACCESS_TOKEN=$(curl -s -X POST "http://keycloak:8080/realms/iceberg/protocol/openid-connect/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "grant_type=client_credentials&client_id=$$CLIENT_ID&client_secret=$$CLIENT_SECRET&scope=lakekeeper" | jq -r .access_token);
+      
+      echo "Bootstrapping lakekeeper";
+      curl -s -X POST "http://lakekeeper:8181/management/v1/bootstrap" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $$ACCESS_TOKEN" \
+        -d "{\"accept-terms-of-use\": true}";
+      
+      echo "Assigning permission to admin user + service principal + nimtable";
+      curl -s -X POST "http://lakekeeper:8181/management/v1/permissions/server/assignments" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $$ACCESS_TOKEN" \
+        -d "{
+              \"writes\": [
+                {
+                  \"user\": \"oidc~7ff741f3-8ace-44b0-bb79-2bb48cf0cd3a\",
+                  \"type\": \"admin\"
+                },
+                {
+                  \"user\": \"oidc~974729d6-6de6-4e1e-9413-850c6426f4db\",
+                  \"type\": \"operator\"
+                },
+                {
+                  \"user\": \"oidc~d2674120-a682-4866-adab-94eb0a045141\",
+                  \"type\": \"operator\"
+                }
+              ]
+            }";
+      
+      echo "Assigning project permission to admin user";
+      curl -s -X POST "http://lakekeeper:8181/management/v1/permissions/project/assignments" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $$ACCESS_TOKEN" \
+        -d "{\"writes\": [{\"user\": \"oidc~7ff741f3-8ace-44b0-bb79-2bb48cf0cd3a\", \"type\": \"project_admin\"}]}";
+      
+      echo "Creating first iceberg warehouse";
+      WAREHOUSE_ID=$(curl -s -X POST "http://lakekeeper:8181/management/v1/warehouse" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $$ACCESS_TOKEN" \
+        -d "{
+            \"warehouse-name\": \"test-warehouse\",
+            \"storage-profile\": {
+              \"type\": \"s3\",
+              \"bucket\": \"bucket-test-iceberg-datalake\",
+              \"key-prefix\": \"test-warehouse\",
+              \"endpoint\": \"http://minio:9000\",
+              \"region\": \"local-01\",
+              \"path-style-access\": true,
+              \"flavor\": \"minio\",
+              \"sts-enabled\": true
+            },
+            \"storage-credential\": {
+              \"type\": \"s3\",
+              \"credential-type\": \"access-key\",
+              \"aws-access-key-id\": \"minio-root-user\",
+              \"aws-secret-access-key\": \"minio-root-password\"
+            }
+          }" | jq -r .\"warehouse-id\");
+      
+      echo "Warehouse created with id: $$WAREHOUSE_ID. Creating customer namespace";
+      NAMESPACE_ID=$(curl -s -X POST "http://lakekeeper:8181/catalog/v1/$$WAREHOUSE_ID/namespaces" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $$ACCESS_TOKEN" \
+        -d "{\"namespace\": [\"customer\"], \"properties\": {\"owner\":  \"peter\"}}" | jq -r .properties.namespace_id);
+      
+      echo "Namespace created with id: $$NAMESPACE_ID. Assigning first permissions: pete owner and spark can create/modify.";
+      curl -s -X POST "http://lakekeeper:8181/management/v1/permissions/namespace/$$NAMESPACE_ID/assignments" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $$ACCESS_TOKEN" \
+        -d "{
+          \"writes\": [
+            {
+              \"user\": \"oidc~cfb55bf6-fcbb-4a1e-bfec-30c6649b52f8\",
+              \"type\": \"ownership\"
+            },
+            {
+              \"user\": \"oidc~9410d0bf-4487-4177-a34f-af364cac0a59\",
+              \"type\": \"create\"
+            },
+            {
+              \"user\": \"oidc~9410d0bf-4487-4177-a34f-af364cac0a59\",
+              \"type\": \"modify\"
+            }
+          ]
+        }";
+      
+      '
     depends_on:
       lakekeeper:
         condition: service_healthy
-      init-minio:
-        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+
+
+  ### Open Policy Agent ###
+
+  opa:
+    image: openpolicyagent/opa:1.9.0-static
+    platform: linux/arm64
+    command: [ "run", "--server", "--log-format", "text", "--log-level", "debug", "--addr", "0.0.0.0:8181", "/policies" ]
+    environment:
+      - LAKEKEEPER_URL=http://lakekeeper:8181
+      - LAKEKEEPER_TOKEN_ENDPOINT=http://keycloak:8080/realms/iceberg/protocol/openid-connect/token
+      - LAKEKEEPER_CLIENT_ID=trino
+      - LAKEKEEPER_CLIENT_SECRET=AK48QgaKsqdEpP9PomRJw7l2T7qWGHdZ
+      - LAKEKEEPER_SCOPE=lakekeeper
+      - TRINO_LAKEKEEPER_CATALOG_NAME=lakekeeper
+      - LAKEKEEPER_LAKEKEEPER_WAREHOUSE=test-warehouse
+    volumes:
+      - ./opa-policies:/policies
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8181/health" ]
+      interval: 5s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      lakekeeper:
+        condition: service_healthy
+
+  ### Nimtable ###
+
+  nimtable-db:
+    image: postgres:17
+    restart: unless-stopped
+    volumes:
+      - nimtable-postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: nimtable
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  nimtable:
+    image: ghcr.io/nimtable/nimtable:nightly
+    pull_policy: missing
+    restart: always
+    depends_on:
+      nimtable-db:
+        condition: service_healthy
+      lakekeeper:
+        condition: service_healthy
+    ports:
+      - "8183:8182"
+    volumes:
+      - ./nimtable-config.yaml:/nimtable/config.yaml
+    environment:
+      JAVA_OPTS: -Xmx8g -Xms512m
+
+  nimtable-web:
+    image: ghcr.io/nimtable/nimtable-web:nightly
+    pull_policy: missing
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - JAVA_API_URL=http://nimtable:8182
+      - DATABASE_URL=postgresql://postgres:nimtable@nimtable-db:5432/postgres
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - ADMIN_USERNAME=admin-user
+      - ADMIN_PASSWORD=admin-pwd
+    depends_on:
+      - nimtable
+
+
+  ### Trino ###
+
+  trino:
+    image: trinodb/trino:467
+    environment:
+      - OIDC_ISSUER=http://localhost:30080/realms/iceberg
+    volumes:
+      - ./trino-config/access-control.properties:/etc/trino/access-control.properties
+      - ./trino-config/config.properties:/etc/trino/config.properties
+      - ./trino-config/log.properties:/etc/trino/log.properties
+    healthcheck:
+      test: [ "CMD", "curl", "-I", "http://localhost:8080/v1/status" ]
+      interval: 2s
+      timeout: 10s
+      retries: 2
+      start_period: 10s
+
+  # Reverse proxy that secures the connection to the server (HTTPS required in trino OAUTH2 settings)
+  trino-proxy:
+    image: nginx:1.29.2-trixie
+    ports:
+      - "443:443"
+      - "38191:38191"
+    volumes:
+      - ./trino-config/nginx.conf:/etc/nginx/nginx.conf
+      - ./trino-config/certs:/etc/nginx/certs
+    depends_on:
+      trino:
+        condition: service_healthy
+
+
+  ### Jupyter notebooks ###
+
+  jupyter:
+    image: quay.io/jupyter/pyspark-notebook:2024-10-14
+    command: start-notebook.sh --NotebookApp.token=''
+    volumes:
+      - ./notebooks:/home/jovyan/examples/
+    ports:
+      - "8888:8888"
+      - "4040:4040"
