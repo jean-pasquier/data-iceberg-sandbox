@@ -1,0 +1,15 @@
+services:
+  pyiceberg:
+    build:
+      context: "../etl/"
+    command:
+      - /app/src/apps/analytics/count_clients.py
+      - "--read"
+      - "customer.raw_client"
+      - "--write"
+      - "customer.agg_clients_per_cat"
+    environment:
+      # pyiceberg catalog completely set using pyiceberg.yaml file (not production ready !)
+      # env vars do not work because "_" are converted into "-"
+      # "OAUTH2__TOKEN_UR" is interpreted as "oauth2.token-url" instead of "oauth2.token_url"
+      - PYICEBERG_CATALOG__DEFAULT__AUTH__OAUTH2__TOKEN_URL=http://keycloak:8080/realms/iceberg/protocol/openid-connect/token
