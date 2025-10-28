@@ -1,0 +1,12 @@
+catalog:
+  default:
+    type: rest
+    uri: http://lakekeeper:8181/catalog
+    warehouse: test-warehouse
+    auth:
+      type: oauth2
+      oauth2:
+        client_id: pyiceberg
+        client_secret: oiLavLz5HvWjZ0zEE0sK2n3ZEPnPkMic
+        token_url: http://keycloak:8080/realms/iceberg/protocol/openid-connect/token
+        scope: lakekeeper
