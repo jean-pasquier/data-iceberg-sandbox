@@ -13,6 +13,7 @@ spark-apps = [
 python-apps = [
     "polars>=1.34.0",
     "pyiceberg>=0.10.0",
+    "pyarrow>=22.0.0",
 ]
 
 [build-system]
