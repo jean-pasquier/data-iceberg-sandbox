@@ -8,11 +8,7 @@ import polars as pl
 # Catalog defined in pyiceberg.yaml
 # Must manually load env vars
 # because "_" are replaced by "-" eg "AUTH__OAUTH2__CLIENT_SECRET" interpreted as "auth.oauth2.client-secret"
-catalog = load_catalog(
-    **{
-        "auth.oauth2.client_secret": os.getenv("PYICEBERG_CATALOG__DEFAULT__AUTH__OAUTH2__CLIENT_SECRET", "toto"),
-        "auth.oauth2.token_url": os.getenv("PYICEBERG_CATALOG__DEFAULT__AUTH__OAUTH2__TOKEN_URL"),
-    })
+catalog = load_catalog()
 
 
 def read_data(read_table: str) -> pl.DataFrame:
@@ -60,7 +56,7 @@ if __name__ == "__main__":
 
     df = read_data(args.read)
 
-    counts = df.group_by("category").len()
+    counts = df.group_by("category").agg(pl.functions.len().cast(pl.Int64).alias("len"))
     print(counts.head())
 
     write_results(counts, args.write)
