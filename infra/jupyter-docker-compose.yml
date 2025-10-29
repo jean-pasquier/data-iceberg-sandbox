@@ -1,0 +1,12 @@
+services:
+
+  ### Jupyter notebooks ###
+
+  jupyter:
+    image: quay.io/jupyter/pyspark-notebook:2024-10-14
+    command: start-notebook.sh --NotebookApp.token=''
+    volumes:
+      - ./notebooks:/home/jovyan/examples/
+    ports:
+      - "8888:8888"
+      - "4040:4040"

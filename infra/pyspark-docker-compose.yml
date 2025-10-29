@@ -13,3 +13,6 @@ services:
     # Make container idle to allow executing commands afterward
     tty: true
     entrypoint: /bin/sh
+    depends_on:
+      lakekeeper:
+        condition: service_healthy

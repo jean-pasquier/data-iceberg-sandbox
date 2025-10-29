@@ -19,23 +19,27 @@ scrape_configs:
 
   - job_name: redpanda
     static_configs:
-      - targets: ["message_queue:9644"]
+      - targets: ["kafka:9644"]
 
-  - job_name: compute
+  - job_name: risingwave-meta
     static_configs:
-      - targets: ["compute-node-0:1222"]
+      - targets: ["risingwave-meta-0:1250"]
 
-  - job_name: meta
+  - job_name: risingwave-compute
     static_configs:
-      - targets: ["meta-node-0:1250"]
+      - targets: ["risingwave-compute-0:1222"]
 
-  - job_name: compactor
+  - job_name: risingwave-compactor-1
     static_configs:
-      - targets: ["compactor-0:1260"]
+      - targets: ["risingwave-compactor-0:1260"]
 
-  - job_name: frontend
+  - job_name: risingwave-compactor-2
     static_configs:
-      - targets: ["frontend-node-0:2222"]
+      - targets: ["risingwave-compactor-1:1261"]
+
+  - job_name: risingwave-risingwavefrontend
+    static_configs:
+      - targets: ["risingwave-frontend-0:2222"]
 
 
   - job_name: standalone

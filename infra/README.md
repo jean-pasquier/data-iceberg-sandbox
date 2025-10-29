@@ -8,34 +8,20 @@ Docker compose
 # 1. Spin up datalake stack: Keycloak, MinIO, lakekeeper, etc. 
 docker compose up -d
 
-# 3. Spin up an idle PySpark container with our ETL code mounted
-docker compose -f pyspark-docker-compose.yml up -d
+# 2. Optionally spin up Nimtable iceberg observability UI
+docker compose -f docker-compose.yml -f nimtable-docker-compose.yml up -d
 ```
 
 Visit UI provided:
-* Lakekeeper: [http://localhost:8181](http://localhost:8181)
-* Nimtable: [http://localhost:3000](http://localhost:3000)
+* Lakekeeper: [http://localhost:8181](http://localhost:8181). Connect with username `cdo`, password `iceberg`.
+* Nimtable: [http://localhost:3000](http://localhost:3000). Connect with username `admin-user`, password `admin-pwd`.
 
 
+> Known issue: Nimtable OAuth implementation is limited, it does not request for new token when expire, so might experience some Authorization errors. If so, restart nimtable backend service:
+> ```shell
+> docker compose -f docker-compose.yml -f nimtable-docker-compose.yml restart nimtable
+> ```
 
-
-
-We can also query the data with Trino query engine. 
-
-```shell
-# 1. Spin up Trino query engine
-docker compose -f trino-docker-compose.yml up -d
-
-# 2. Register the Iceberg catalog in Trino 
-docker compose -f trino-docker-compose.yml exec trino trino -f /home/trino/init-catalog-trino.sql
-
-# 3. Open a Trino SQL terminal to run some queries
-docker compose -f trino-docker-compose.yml exec trino trino
-trino> SHOW CATALOGS;
-trino> SHOW SCHEMAS IN lakekeeper;  # schemas are namespaces, eg tables are identified as '<catalog>.<namespace>.<table>'
-trino> SHOW CATALOGS;
-trino> SELECT category, COUNT(*) FROM lakekeeper.poc_ns.people_partitioned GROUP BY 1;
-```
 
 
 
@@ -83,16 +69,18 @@ Make sure to build the [ETL package](../etl/README.md)
 ```shell
 
 # This generate data (with id's range as argument)
-docker compose exec \
+docker compose -f docker-compose.yml -f pyspark-docker-compose.yml exec \
   -e KEYCLOAK_TOKEN_ENDPOINT="http://keycloak:8080/realms/iceberg/protocol/openid-connect/token" \
   -e KEYCLOAK_CLIENT_ID=spark \
   -e KEYCLOAK_CLIENT_SECRET=2OR3eRvYfSZzzZ16MlPd95jhLnOaLM52 \
   pyspark ./bin/spark-submit \
     --master 'local[2]' \
+    --conf "spark.driver.extraJavaOptions=${log4j_setting}" \
+    --conf "spark.executor.extraJavaOptions=${log4j_setting}" \
     --py-files /opt/spark/custom/dist/apps-0.1.0.tar.gz \
     /opt/spark/custom/src/apps/load_people/create_table.py \
     --table lakekeeper.customer.raw_client \
-    --from_id 0 --to_id 2000000
+    --from_id 3000000 --to_id 4000000
 ```
 
 Run several times the spark job to create several iceberg snapshots (eg versions). Visit [Nimtable UI](http://localhost:3000) and check that table has been loaded (Data > Tables > `people_partitioned`) and number of records has increased (`Version Control` tab). Run the `Optimize table` to run compaction job (one time or scheduled) to solve data lake small files issue. The UI allows to preview data and running SQL queries.

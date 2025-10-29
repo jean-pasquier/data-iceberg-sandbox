@@ -1,0 +1,31 @@
+services:
+
+  ### Trino ###
+
+  trino:
+    image: trinodb/trino:467
+    environment:
+      - OIDC_ISSUER=http://localhost:30080/realms/iceberg
+    volumes:
+      - ./trino-config/access-control.properties:/etc/trino/access-control.properties
+      - ./trino-config/config.properties:/etc/trino/config.properties
+      - ./trino-config/log.properties:/etc/trino/log.properties
+    healthcheck:
+      test: [ "CMD", "curl", "-I", "http://localhost:8080/v1/status" ]
+      interval: 2s
+      timeout: 10s
+      retries: 2
+      start_period: 10s
+
+  # Reverse proxy that secures the connection to the server (HTTPS required in trino OAUTH2 settings)
+  trino-proxy:
+    image: nginx:1.29.2-trixie
+    ports:
+      - "443:443"
+      - "38191:38191"
+    volumes:
+      - ./trino-config/nginx.conf:/etc/nginx/nginx.conf
+      - ./trino-config/certs:/etc/nginx/certs
+    depends_on:
+      trino:
+        condition: service_healthy

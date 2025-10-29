@@ -1,21 +1,25 @@
 volumes:
-  openfga-postgres:
-  keycloak-postgres:
-  lakekeeper-postgres:
-  nimtable-postgres:
+  postgres:
   minio:
 
 
 services:
 
-  ### Open FGA ###
+  #### Shared postgres: 1 single postgres instance with 1 database per service
 
-  openfga-db:
+  postgres:
     image: postgres:17
     environment:
-      - POSTGRES_PASSWORD=openfga
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      # create one user:password/db for each following services
+      - POSTGRES_DATABASES=openfga,keycloak,lakekeeper,nimtable,risingwave,rwconsole
     volumes:
-      - openfga-postgres:/var/lib/postgresql/data
+      - postgres:/var/lib/postgresql/data
+      - ./create-postgres-databases.sh:/docker-entrypoint-initdb.d/create-postgres-databases.sh
+    ports:
+      - "5432:5432"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres -p 5432 -d postgres" ]
       interval: 2s
@@ -23,14 +27,17 @@ services:
       retries: 2
       start_period: 10s
 
+
+  ### Open FGA ###
+
   openfga-migrate:
     image: openfga/openfga:v1.8
     command: migrate
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
-      - OPENFGA_DATASTORE_URI=postgres://postgres:openfga@openfga-db:5432/postgres?sslmode=disable
+      - OPENFGA_DATASTORE_URI=postgres://openfga:openfga@postgres:5432/openfga?sslmode=disable
     depends_on:
-      openfga-db:
+      postgres:
         condition: service_healthy
 
   openfga:
@@ -38,7 +45,7 @@ services:
     command: run
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
-      - OPENFGA_DATASTORE_URI=postgres://postgres:openfga@openfga-db:5432/postgres?sslmode=disable
+      - OPENFGA_DATASTORE_URI=postgres://openfga:openfga@postgres:5432/openfga?sslmode=disable
       - OPENFGA_DATASTORE_MAX_OPEN_CONNS=50
       - OPENFGA_PLAYGROUND_ENABLED=false
     healthcheck:
@@ -47,7 +54,7 @@ services:
       timeout: 30s
       retries: 3
     depends_on:
-      openfga-db:
+      postgres:
         condition: service_healthy
       openfga-migrate:
         condition: service_completed_successfully
@@ -55,27 +62,14 @@ services:
 
   ### Keycloak ###
 
-  keycloak-db:
-    image: postgres:17
-    environment:
-      - POSTGRES_PASSWORD=keycloak
-    volumes:
-      - keycloak-postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -p 5432 -d postgres" ]
-      interval: 2s
-      timeout: 10s
-      retries: 2
-      start_period: 10s
-
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.7
     environment:
       - KC_BOOTSTRAP_ADMIN_USERNAME=admin
       - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
       - KC_DB=postgres
-      - KC_DB_URL=jdbc:postgresql://keycloak-db/postgres
-      - KC_DB_USERNAME=postgres
+      - KC_DB_URL=jdbc:postgresql://postgres/keycloak
+      - KC_DB_USERNAME=keycloak
       - KC_DB_PASSWORD=keycloak
     volumes:
       - ./keycloak-realm.json:/opt/keycloak/data/import/realm.json
@@ -89,7 +83,7 @@ services:
       retries: 3
       start_period: 120s
     depends_on:
-      keycloak-db:
+      postgres:
         condition: service_healthy
 
 
@@ -122,45 +116,32 @@ services:
     depends_on:
       minio:
         condition: service_healthy
-    restart: on-failure
+    restart: no
     entrypoint: >
       /bin/sh -c "
       sleep 5;
       /usr/bin/mc alias set minio http://minio:9000 minio-root-user minio-root-password;
       /usr/bin/mc mb minio/bucket-test-iceberg-datalake;
+      /usr/bin/mc mb minio/risingwave-hummock001;
       exit 0;
       "
   
-  
 
   ### Lakekeeper ###
-
-  lakekeeper-db:
-    image: postgres:17
-    environment:
-      - POSTGRES_PASSWORD=lakekeeper
-    volumes:
-      - lakekeeper-postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -p 5432 -d postgres" ]
-      interval: 2s
-      timeout: 10s
-      retries: 2
-      start_period: 10s
 
   lakekeeper-migrate:
     image: quay.io/lakekeeper/catalog:v0.10.3
     environment:
       - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
-      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:lakekeeper@lakekeeper-db:5432/postgres
-      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:lakekeeper@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://lakekeeper:lakekeeper@postgres:5432/lakekeeper
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://lakekeeper:lakekeeper@postgres:5432/lakekeeper
       - LAKEKEEPER__AUTHZ_BACKEND=openfga
       - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga:8081
       - RUST_LOG=info
     restart: "no"
     entrypoint: [ "/home/nonroot/lakekeeper", "migrate" ]
     depends_on:
-      lakekeeper-db:
+      postgres:
         condition: service_healthy
       openfga:
         condition: service_healthy
@@ -175,8 +156,8 @@ services:
     image: quay.io/lakekeeper/catalog:v0.10.3
     environment:
       - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
-      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:lakekeeper@lakekeeper-db:5432/postgres
-      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:lakekeeper@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://lakekeeper:lakekeeper@postgres:5432/lakekeeper
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://lakekeeper:lakekeeper@postgres:5432/lakekeeper
       - LAKEKEEPER__AUTHZ_BACKEND=openfga
       - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga:8081
       - LAKEKEEPER__OPENID_PROVIDER_URI=http://keycloak:8080/realms/iceberg
@@ -197,7 +178,7 @@ services:
     depends_on:
       lakekeeper-migrate:
         condition: service_completed_successfully
-      lakekeeper-db:
+      postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -331,92 +312,3 @@ services:
     depends_on:
       lakekeeper:
         condition: service_healthy
-
-  ### Nimtable ###
-
-  nimtable-db:
-    image: postgres:17
-    restart: unless-stopped
-    volumes:
-      - nimtable-postgres:/var/lib/postgresql/data
-    environment:
-      POSTGRES_PASSWORD: nimtable
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d postgres" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  nimtable:
-    image: ghcr.io/nimtable/nimtable:nightly
-    pull_policy: missing
-    restart: always
-    depends_on:
-      nimtable-db:
-        condition: service_healthy
-      lakekeeper:
-        condition: service_healthy
-    ports:
-      - "8183:8182"
-    volumes:
-      - ./nimtable-config.yaml:/nimtable/config.yaml
-    environment:
-      JAVA_OPTS: -Xmx8g -Xms512m
-
-  nimtable-web:
-    image: ghcr.io/nimtable/nimtable-web:nightly
-    pull_policy: missing
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      - JAVA_API_URL=http://nimtable:8182
-      - DATABASE_URL=postgresql://postgres:nimtable@nimtable-db:5432/postgres
-      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-      - ADMIN_USERNAME=admin-user
-      - ADMIN_PASSWORD=admin-pwd
-    depends_on:
-      - nimtable
-
-
-  ### Trino ###
-
-  trino:
-    image: trinodb/trino:467
-    environment:
-      - OIDC_ISSUER=http://localhost:30080/realms/iceberg
-    volumes:
-      - ./trino-config/access-control.properties:/etc/trino/access-control.properties
-      - ./trino-config/config.properties:/etc/trino/config.properties
-      - ./trino-config/log.properties:/etc/trino/log.properties
-    healthcheck:
-      test: [ "CMD", "curl", "-I", "http://localhost:8080/v1/status" ]
-      interval: 2s
-      timeout: 10s
-      retries: 2
-      start_period: 10s
-
-  # Reverse proxy that secures the connection to the server (HTTPS required in trino OAUTH2 settings)
-  trino-proxy:
-    image: nginx:1.29.2-trixie
-    ports:
-      - "443:443"
-      - "38191:38191"
-    volumes:
-      - ./trino-config/nginx.conf:/etc/nginx/nginx.conf
-      - ./trino-config/certs:/etc/nginx/certs
-    depends_on:
-      trino:
-        condition: service_healthy
-
-
-  ### Jupyter notebooks ###
-
-  jupyter:
-    image: quay.io/jupyter/pyspark-notebook:2024-10-14
-    command: start-notebook.sh --NotebookApp.token=''
-    volumes:
-      - ./notebooks:/home/jovyan/examples/
-    ports:
-      - "8888:8888"
-      - "4040:4040"

@@ -1,0 +1,37 @@
+services:
+
+  ### Nimtable ###
+
+  # Must not change service names because of proxying
+
+  nimtable:
+    image: ghcr.io/nimtable/nimtable:nightly
+    pull_policy: missing
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      lakekeeper:
+        condition: service_healthy
+    ports:
+      - "8183:8182"
+    volumes:
+      - ./nimtable-config.yaml:/nimtable/config.yaml
+    environment:
+      JAVA_OPTS: -Xmx8g -Xms512m
+
+
+  nimtable-web:
+    image: ghcr.io/nimtable/nimtable-web:nightly
+    pull_policy: missing
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - JAVA_API_URL=http://nimtable:8182
+      - DATABASE_URL=postgresql://nimtable:nimtable@postgres:5432/nimtable
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - ADMIN_USERNAME=admin-user
+      - ADMIN_PASSWORD=admin-pwd
+    depends_on:
+      - nimtable
