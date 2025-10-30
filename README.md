@@ -2,7 +2,47 @@
 
 ## Infra
 
-Rely on docker & docker compose, see [infra](./infra/README.md)
+### Overview
+
+Rely on docker & docker compose
+
+> Note: This commands creates a dozen of docker containers, make sure to have sufficient memory available for docker (6GB strict minimum, 16GB better)
+
+```shell
+docker compose -f observability-docker-compose.yml -f docker-compose.yml -f nimtable-docker-compose.yml -f trino-docker-compose.yml -f jupyter-docker-compose.yml -f kafka-docker-compose.yml -f risingwave-docker-compose.yml up --build -d
+```
+
+* Prometheus
+* Grafana
+* Postgres
+* MinIO
+* Openfga
+* Keycloak
+* Lakekeeper
+* OPA
+* Nimtable
+* Trino
+* Jupyter
+* Kafka
+* RisingWave
+
+And some python or pyspark ETL with some code ready to run:
+
+```shell
+docker compose -f pyspark-docker-compose.yml run --build pyspark ./bin/spark-sql --help
+docker compose -f pyiceberg-docker-compose.yml run --build pyiceberg
+```
+
+* PySpark
+* PyIceberg
+
+See [Playing with the data](#playing-with-the-data)
+
+
+### Step-by-step guide
+
+See complete scenario with user & data management on [infra](./infra/README.md)
+
 
 ## Playing with the data
 
