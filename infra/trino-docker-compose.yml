@@ -15,7 +15,7 @@ services:
       interval: 2s
       timeout: 10s
       retries: 2
-      start_period: 10s
+      start_period: 30s
 
   # Reverse proxy that secures the connection to the server (HTTPS required in trino OAUTH2 settings)
   trino-proxy:
