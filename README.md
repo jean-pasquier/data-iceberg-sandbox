@@ -57,3 +57,11 @@ Play with the data using PySpark or pyiceberg, see [etl](./etl/README.md)
 * Run the [nimtable rust iceberg compaction service](https://github.com/nimtable/iceberg-compaction)
 * Compare with competitors: [unitycatalog](https://github.com/unitycatalog/unitycatalog), [nessie](https://github.com/projectnessie/nessie), etc.
 * Check streaming implementations: eg [fluss](https://github.com/apache/fluss)
+
+
+## Acknowledgements
+
+Inspired by: 
+* Lakekeeper [advanced control example](https://github.com/lakekeeper/lakekeeper/tree/main/examples/access-control-advanced)
+* RisingWave [quickstart](https://docs.risingwave.com/get-started/quickstart)
+* RisingWave [Iceberg article on Medium](https://blog.dataengineerthings.org/we-built-an-open-source-s3-tables-alternative-2b3c95ef4b3a)
