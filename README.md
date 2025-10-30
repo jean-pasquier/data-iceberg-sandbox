@@ -9,7 +9,8 @@ Rely on docker & docker compose
 > Note: This commands creates a dozen of docker containers, make sure to have sufficient memory available for docker (6GB strict minimum, 16GB better)
 
 ```shell
-docker compose -f observability-docker-compose.yml -f docker-compose.yml -f nimtable-docker-compose.yml -f trino-docker-compose.yml -f jupyter-docker-compose.yml -f kafka-docker-compose.yml -f risingwave-docker-compose.yml up --build -d
+cd infra/
+docker compose -f observability-docker-compose.yml -f docker-compose.yml -f nimtable-docker-compose.yml -f trino-docker-compose.yml -f jupyter-docker-compose.yml -f kafka-docker-compose.yml -f risingwave-docker-compose.yml --profile risingwave-standalone up --build -d
 ```
 
 * Prometheus
