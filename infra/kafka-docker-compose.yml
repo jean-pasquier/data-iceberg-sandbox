@@ -1,0 +1,71 @@
+volumes:
+  redpanda:
+
+
+services:
+
+  ### Kafka single node
+
+  kafka:
+    image: redpandadata/redpanda:v25.2.10
+    command:
+      - redpanda
+      - start
+      # Kafka broker
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://kafka:9092,external://localhost:19092
+
+      # Kafka proxy
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://kafka:8082,external://localhost:18082
+
+      # Kafka schema registry
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+
+      - --rpc-addr kafka:33145
+      - --advertise-rpc-addr kafka:33145
+      - --smp 1
+      - --default-log-level=info
+    volumes:
+      - redpanda:/var/lib/redpanda/data
+      - ./kafka-bootstrap.yaml:/etc/redpanda/.bootstrap.yaml
+    ports:
+      - "18081:18081"
+      - "18082:18082"
+      - "19092:19092"
+      - "19644:9644"
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 10s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+
+
+  ### Kafka Console
+  kafka-console:
+    image: docker.redpanda.com/redpandadata/console:v3.2.2
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml && /app/console'
+    environment:
+      CONFIG_FILEPATH: ${CONFIG_FILEPATH:-/tmp/config.yml}
+      CONSOLE_CONFIG_FILE: |
+        # Configure a connection to the Redpanda cluster
+        # See https://docs.redpanda.com/current/console/config/connect-to-redpanda/
+        kafka:
+          brokers: ["kafka:9092"]
+        schemaRegistry:
+          enabled: true
+          urls: ["http://kafka:8081"]        
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://kafka:9644"]
+        console:
+          topicDocumentation:
+            enabled: false
+    ports:
+      - "8080:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy

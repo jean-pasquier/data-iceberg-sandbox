@@ -1,0 +1,13 @@
+admin_api_require_auth: false
+enable_sasl: false
+auto_create_topics_enabled: true
+data_transforms_enabled: true
+audit_enabled: false
+cloud_storage_enabled: false
+partition_autobalancing_mode: off
+enable_consumer_group_metrics:
+  - "group"
+  - "partition"
+  - "consumer_lag"
+consumer_group_lag_collection_interval_sec: 60
+enable_host_metrics: true
