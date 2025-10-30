@@ -1,0 +1,329 @@
+volumes:
+  redpanda:
+
+x-image: &image
+  image: ${RW_IMAGE:-risingwavelabs/risingwave:v2.6.1}
+
+
+services:
+
+  #### RISING WAVE STANDALONE MODE - single node ####
+  # only --profile risingwave-standalone
+
+  risingwave-standalone:
+    <<: *image
+    profiles:
+      - risingwave-standalone
+    command: "standalone --meta-opts=\" \
+        --listen-addr 0.0.0.0:5690 \
+        --advertise-addr 0.0.0.0:5690 \
+        --dashboard-host 0.0.0.0:5691 \
+        --prometheus-host 0.0.0.0:1250 \
+        --prometheus-endpoint http://prometheus:9500 \
+        --backend sql \
+        --sql-endpoint postgres://risingwave:risingwave@postgres:5432/risingwave \
+        --state-store hummock+minio://minio-root-user:minio-root-password@minio:9000/risingwave-hummock001 \
+        --data-directory risingwave-hummock001 \
+        --config-path /risingwave.toml\" \
+     --compute-opts=\" \
+        --config-path /risingwave.toml \
+        --listen-addr 0.0.0.0:5688 \
+        --prometheus-listener-addr 0.0.0.0:1250 \
+        --advertise-addr 0.0.0.0:5688 \
+        --async-stack-trace verbose \
+        --parallelism ${RW_COMPUTE_PARALLELISM:-2} \
+        --total-memory-bytes ${RW_DEFAULT_MEMORY_BYTES:-1073741824} \
+        --role both \
+        --meta-address http://0.0.0.0:5690 \
+        --memory-manager-target-bytes ${RW_COMPUTE_TARGET_BYTES:-2147483648} \" \
+     --frontend-opts=\" \
+       --config-path /risingwave.toml \
+       --listen-addr 0.0.0.0:4566 \
+       --advertise-addr 0.0.0.0:4566 \
+       --prometheus-listener-addr 0.0.0.0:1250 \
+       --health-check-listener-addr 0.0.0.0:6786 \
+       --meta-addr http://0.0.0.0:5690 \
+       --frontend-total-memory-bytes=${RW_DEFAULT_MEMORY_BYTES:-1073741824}\" \
+     --compactor-opts=\" \
+       --listen-addr 0.0.0.0:6660 \
+       --prometheus-listener-addr 0.0.0.0:1250 \
+       --advertise-addr 0.0.0.0:6660 \
+       --meta-address http://0.0.0.0:5690 \
+       --compactor-total-memory-bytes=${RW_DEFAULT_MEMORY_BYTES:-1073741824}\""
+    expose:
+      - "6660"
+      - "4566"
+      - "5688"
+      - "5690"
+      - "1250"
+      - "5691"
+    ports:
+      - "4566:4566"
+      - "5690:5690"
+      - "5691:5691"
+      - "1250:1250"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      lakekeeper:
+        condition: service_healthy
+    volumes:
+      - ./risingwave.toml:/risingwave.toml
+    environment:
+      RUST_BACKTRACE: "1"
+      # telemetry will start by default
+      ENABLE_TELEMETRY: ${ENABLE_TELEMETRY:-true}
+      RW_TELEMETRY_TYPE: ${RW_TELEMETRY_TYPE:-"docker-compose"}
+      RW_SECRET_STORE_PRIVATE_KEY_HEX: ${RW_SECRET_STORE_PRIVATE_KEY_HEX:-0123456789abcdef0123456789abcdef}
+      RW_LICENSE_KEY: ${RW_LICENSE_KEY:-}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - bash -c 'printf \"GET / HTTP/1.1\n\n\" > /dev/tcp/127.0.0.1/6660; exit $$?;'
+        - bash -c 'printf \"GET / HTTP/1.1\n\n\" > /dev/tcp/127.0.0.1/5688; exit $$?;'
+        - bash -c '> /dev/tcp/127.0.0.1/4566; exit $$?;'
+        - bash -c 'printf \"GET / HTTP/1.1\n\n\" > /dev/tcp/127.0.0.1/5690; exit $$?;'
+      interval: 5s
+      timeout: 10s
+    restart: always
+
+
+  #### RISINGWAVE CONSOLE ####
+  risingwave-console:
+    image: risingwavelabs/risingwave-console:v0.4.7
+    volumes:
+      - ./risingwave-console.ini:/app/init.yaml
+    environment:
+      - RCONSOLE_SERVER_PORT=8082
+      - RCONSOLE_ROOT_PASSWORD=rootpwd
+      - RCONSOLE_SERVER_PG_DSN=postgres://rwconsole:rwconsole@postgres:5432/rwconsole
+      - RCONSOLE_INIT=/app/init.yaml
+    ports:
+      - "8082:8082"
+    depends_on:
+      risingwave-standalone:
+        condition: service_healthy
+
+
+  #### RISING WAVE DISTRIBUTED MODE ####
+  # only --profile risingwave-distributed
+
+  # RISING WAVE - METADATA NODE
+  risingwave-meta-0:
+    <<: *image
+    profiles:
+      - risingwave-distributed
+    command:
+      - meta-node
+      - "--listen-addr"
+      - "0.0.0.0:5690"
+      - "--advertise-addr"
+      - "risingwave-meta-0:5690"
+      - "--dashboard-host"
+      - "0.0.0.0:5691"
+      - "--prometheus-host"
+      - "0.0.0.0:1250"
+      - "--prometheus-endpoint"
+      - "http://prometheus:9500"
+      - "--backend"
+      - sql
+      - "--sql-endpoint"
+      - "postgres://risingwave:risingwave@postgres:5432/risingwave"
+      - "--state-store"
+      - "hummock+minio://minio-root-user:minio-root-password@minio:9000/risingwave-hummock001"
+      - "--data-directory"
+      - "risingwave-hummock001"
+      - "--config-path"
+      - /risingwave.toml
+    ports:
+      - "5690:5690"
+      - "5691:5691"
+    depends_on:
+      - postgres
+    volumes:
+      - ./risingwave.toml:/risingwave.toml
+    environment:
+      RUST_BACKTRACE: "1"
+      ENABLE_TELEMETRY: ${ENABLE_TELEMETRY:-true}
+      RW_TELEMETRY_TYPE: ${RW_TELEMETRY_TYPE:-"docker-compose"}
+      RW_SECRET_STORE_PRIVATE_KEY_HEX: ${RW_SECRET_STORE_PRIVATE_KEY_HEX:-0123456789abcdef0123456789abcdef}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - bash -c 'printf "GET / HTTP/1.1\n\n" > /dev/tcp/127.0.0.1/5690; exit $$?;'
+      interval: 1s
+      timeout: 5s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  # RISING WAVE - COMPACTOR NODE 1
+  risingwave-compactor-0:
+    <<: *image
+    profiles:
+      - risingwave-distributed
+    command:
+      - compactor-node
+      - "--listen-addr"
+      - "0.0.0.0:6660"
+      - "--advertise-addr"
+      - "risingwave-compactor-0:6660"
+      - "--prometheus-listener-addr"
+      - "0.0.0.0:1260"
+      - "--meta-address"
+      - "http://risingwave-meta-0:5690"
+      - "--config-path"
+      - /risingwave.toml
+    depends_on:
+      risingwave-meta-0:
+        condition: service_healthy
+    volumes:
+      - ./risingwave.toml:/risingwave.toml
+    environment:
+      RUST_BACKTRACE: "1"
+      ENABLE_TELEMETRY: ${ENABLE_TELEMETRY:-true}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - bash -c 'printf "GET / HTTP/1.1\n\n" > /dev/tcp/127.0.0.1/6660; exit $$?;'
+      interval: 1s
+      timeout: 5s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  # RISING WAVE - COMPACTOR NODE 2
+  risingwave-compactor-1:
+    <<: *image
+    profiles:
+      - risingwave-distributed
+    command:
+      - compactor-node
+      - "--listen-addr"
+      - "0.0.0.0:6661"
+      - "--advertise-addr"
+      - "risingwave-compactor-1:6661"
+      - "--prometheus-listener-addr"
+      - "0.0.0.0:1261"
+      - "--meta-address"
+      - "http://risingwave-meta-0:5690"
+      - "--compactor-mode"
+      - "dedicated-iceberg"
+      - "--config-path"
+      - /risingwave.toml
+    depends_on:
+      risingwave-meta-0:
+        condition: service_healthy
+    volumes:
+      - ./risingwave.toml:/risingwave.toml
+    environment:
+      RUST_BACKTRACE: "1"
+      ENABLE_TELEMETRY: ${ENABLE_TELEMETRY:-true}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - bash -c 'printf "GET / HTTP/1.1\n\n" > /dev/tcp/127.0.0.1/6661; exit $$?;'
+      interval: 1s
+      timeout: 5s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  # RISING WAVE - COMPUTE NODE 1
+  risingwave-compute-0:
+    <<: *image
+    profiles:
+      - risingwave-distributed
+    command:
+      - compute-node
+      - "--listen-addr"
+      - "0.0.0.0:5688"
+      - "--advertise-addr"
+      - "risingwave-compute-0:5688"
+      - "--prometheus-listener-addr"
+      - "0.0.0.0:1222"
+      - "--meta-address"
+      - "http://risingwave-meta-0:5690"
+      - "--config-path"
+      - /risingwave.toml
+    depends_on:
+      risingwave-meta-0:
+        condition: service_healthy
+    volumes:
+      - ./risingwave.toml:/risingwave.toml
+    environment:
+      RUST_BACKTRACE: "1"
+      ENABLE_TELEMETRY: ${ENABLE_TELEMETRY:-true}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - bash -c 'printf "GET / HTTP/1.1\n\n" > /dev/tcp/127.0.0.1/5688; exit $$?;'
+      interval: 1s
+      timeout: 5s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  # RISING WAVE - FRONTEND NODE 1
+  risingwave-frontend-0:
+    <<: *image
+    profiles:
+      - risingwave-distributed
+    command:
+      - frontend-node
+      - "--listen-addr"
+      - "0.0.0.0:4566"
+      - "--meta-addr"
+      - "http://risingwave-meta-0:5690"
+      - "--advertise-addr"
+      - "risingwave-frontend-0:4566"
+      - "--config-path"
+      - /risingwave.toml
+      - "--prometheus-listener-addr"
+      - "0.0.0.0:2222"
+    ports:
+      - "4566:4566"
+    depends_on:
+      risingwave-meta-0:
+        condition: service_healthy
+    volumes:
+      - "./risingwave.toml:/risingwave.toml"
+    environment:
+      RUST_BACKTRACE: "1"
+      ENABLE_TELEMETRY: ${ENABLE_TELEMETRY:-true}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - bash -c '> /dev/tcp/127.0.0.1/4566; exit $$?;'
+      interval: 1s
+      timeout: 5s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+
