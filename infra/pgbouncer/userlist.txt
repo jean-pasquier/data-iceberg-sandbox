@@ -1,0 +1,8 @@
+"postgres"      "SCRAM-SHA-256$4096:babanJcBppbF/SZw7F1p3Q==$XLAJlAE5KSjMkpetoJ9pcPyZ/nMaka51KOz29SnEsMI=:TA5nfpIYwKe8kkic4z+iOm3/fDtRdHjVjgDs+xtpr0w="
+"openfga"       "SCRAM-SHA-256$4096:8MamMs04hvYJ0ZIWBw3ReA==$rkcR43/TuVc3BJw+eRykgBPCSnhiFjNci7QCQhu//v8=:ByG1PwmXAcFLcylxaEG6AETjA9QVemagu4HjTB/GFfk="
+"keycloak"      "SCRAM-SHA-256$4096:bd2HvoGEW1f4P25t1jxxIQ==$mS3J48Bn72f7/HCNCYXqSBWAZCNEuplE2M+RRIak/a0=:YfreQqo/d8s/F6pVZNOvtTCZMP7FLbTgsXFVOEpvmPc="
+"lakekeeper"    "SCRAM-SHA-256$4096:plSa8jAhvrio8wrQfYgA4Q==$XstImU0kAfVsqv4TgA8rIobD8erlgeyZ06aktJ/7wN0=:i+4MTfzhVpR4NQ27VBYo3ODqBVc9WplhEE5kwfhjKR0="
+"nimtable"      "SCRAM-SHA-256$4096:XnYNmru4A07bCF76Uk5h9g==$hZH2qBmLoQP/h8gC2Rh51jpNXiXoH1bf3hKExpx7Zm0=:Rs1STBIgvD/JjsuY9xsnNSkbtkbIeF/MLEO8GPsavhE="
+"risingwave"    "SCRAM-SHA-256$4096:w1PATYK0pXj8zvj/aDmCGQ==$gEyN4YoXPv7N2yxb6tzrqRWck+SjtF6hP0RbNkQPdj4=:kCeQUjcCHZqtT0HrJgOFj6rxa3r05V7My/5VfkNh8eU="
+"rwconsole"     "SCRAM-SHA-256$4096:uVVNqzP6XEHU437L5AmEPg==$FX8e1nOZvT4/UnioWq3tckRXyDrp7M8EMDYb4DGEvqw=:/dYpT8UiTOvhewIwqNuz2Cve1d1MgIkOGWpZVO4X9QA="
+"admin"         "adminpassword"

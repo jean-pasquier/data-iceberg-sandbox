@@ -6,7 +6,6 @@ volumes:
 services:
 
   #### Shared postgres: 1 single postgres instance with 1 database per service
-
   postgres:
     image: postgres:17
     environment:
@@ -28,6 +27,25 @@ services:
       start_period: 10s
 
 
+  ### PgBouncer as postgres proxy: improve perf by "caching" connections
+  ### Services connects to pgbouncer host (port 6432) instead of postgres
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.24.1-p1
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    ports:
+      - "6432:6432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin -h 127.0.0.1 -p 6432 -d pgbouncer || exit 1" ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+
   ### Open FGA ###
 
   openfga-migrate:
@@ -35,9 +53,9 @@ services:
     command: migrate
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
-      - OPENFGA_DATASTORE_URI=postgres://openfga:openfga@postgres:5432/openfga?sslmode=disable
+      - OPENFGA_DATASTORE_URI=postgres://openfga:openfga@pgbouncer:6432/openfga?sslmode=disable
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
 
   openfga:
@@ -45,16 +63,17 @@ services:
     command: run
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
-      - OPENFGA_DATASTORE_URI=postgres://openfga:openfga@postgres:5432/openfga?sslmode=disable
-      - OPENFGA_DATASTORE_MAX_OPEN_CONNS=50
+      - OPENFGA_DATASTORE_URI=postgres://openfga:openfga@pgbouncer:6432/openfga?sslmode=disable
+      - OPENFGA_DATASTORE_MAX_OPEN_CONNS=200  # PgBouncer allows to safely increase connections
       - OPENFGA_PLAYGROUND_ENABLED=false
+      - OPENFGA_LOG_LEVEL=warn
     healthcheck:
       test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=openfga:8081"]
       interval: 5s
       timeout: 30s
       retries: 3
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       openfga-migrate:
         condition: service_completed_successfully
@@ -64,13 +83,15 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.7
+    restart: on-failure
     environment:
       - KC_BOOTSTRAP_ADMIN_USERNAME=admin
       - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
       - KC_DB=postgres
-      - KC_DB_URL=jdbc:postgresql://postgres/keycloak
+      - KC_DB_URL=jdbc:postgresql://pgbouncer:6432/keycloak
       - KC_DB_USERNAME=keycloak
       - KC_DB_PASSWORD=keycloak
+      - KC_DB_POOL_MAX_SIZE=200
     volumes:
       - ./keycloak-realm.json:/opt/keycloak/data/import/realm.json
     ports:
@@ -83,7 +104,7 @@ services:
       retries: 3
       start_period: 120s
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
 
 
@@ -132,15 +153,15 @@ services:
     image: quay.io/lakekeeper/catalog:v0.10.3
     environment:
       - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
-      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://lakekeeper:lakekeeper@postgres:5432/lakekeeper
-      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://lakekeeper:lakekeeper@postgres:5432/lakekeeper
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://lakekeeper:lakekeeper@pgbouncer:6432/lakekeeper
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://lakekeeper:lakekeeper@pgbouncer:6432/lakekeeper
       - LAKEKEEPER__AUTHZ_BACKEND=openfga
       - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga:8081
       - RUST_LOG=info
     restart: "no"
     entrypoint: [ "/home/nonroot/lakekeeper", "migrate" ]
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       openfga:
         condition: service_healthy
@@ -155,8 +176,8 @@ services:
     image: quay.io/lakekeeper/catalog:v0.10.3
     environment:
       - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
-      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://lakekeeper:lakekeeper@postgres:5432/lakekeeper
-      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://lakekeeper:lakekeeper@postgres:5432/lakekeeper
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://lakekeeper:lakekeeper@pgbouncer:6432/lakekeeper
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://lakekeeper:lakekeeper@pgbouncer:6432/lakekeeper
       - LAKEKEEPER__AUTHZ_BACKEND=openfga
       - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga:8081
       - LAKEKEEPER__OPENID_PROVIDER_URI=http://keycloak:8080/realms/iceberg

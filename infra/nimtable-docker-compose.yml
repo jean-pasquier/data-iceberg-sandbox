@@ -9,7 +9,7 @@ services:
     pull_policy: missing
     restart: always
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       lakekeeper:
         condition: service_healthy
@@ -29,7 +29,7 @@ services:
       - "3000:3000"
     environment:
       - JAVA_API_URL=http://nimtable:8182
-      - DATABASE_URL=postgresql://nimtable:nimtable@postgres:5432/nimtable
+      - DATABASE_URL=postgresql://nimtable:nimtable@pgbouncer:6432/nimtable
       - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
       - ADMIN_USERNAME=admin-user
       - ADMIN_PASSWORD=admin-pwd

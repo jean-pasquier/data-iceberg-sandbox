@@ -21,7 +21,7 @@ services:
         --prometheus-host 0.0.0.0:1250 \
         --prometheus-endpoint http://prometheus:9500 \
         --backend sql \
-        --sql-endpoint postgres://risingwave:risingwave@postgres:5432/risingwave \
+        --sql-endpoint postgres://risingwave:risingwave@pgbouncer:6432/risingwave \
         --state-store hummock+minio://minio-root-user:minio-root-password@minio:9000/risingwave-hummock001 \
         --data-directory risingwave-hummock001 \
         --config-path /risingwave.toml\" \
@@ -63,7 +63,7 @@ services:
       - "5691:5691"
       - "1250:1250"
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       lakekeeper:
         condition: service_healthy
@@ -96,7 +96,7 @@ services:
     environment:
       - RCONSOLE_SERVER_PORT=8082
       - RCONSOLE_ROOT_PASSWORD=rootpwd
-      - RCONSOLE_SERVER_PG_DSN=postgres://rwconsole:rwconsole@postgres:5432/rwconsole
+      - RCONSOLE_SERVER_PG_DSN=postgres://rwconsole:rwconsole@pgbouncer:6432/rwconsole
       - RCONSOLE_INIT=/app/init.yaml
     ports:
       - "8082:8082"
@@ -128,7 +128,7 @@ services:
       - "--backend"
       - sql
       - "--sql-endpoint"
-      - "postgres://risingwave:risingwave@postgres:5432/risingwave"
+      - "postgres://risingwave:risingwave@pgbouncer:6432/risingwave"
       - "--state-store"
       - "hummock+minio://minio-root-user:minio-root-password@minio:9000/risingwave-hummock001"
       - "--data-directory"
