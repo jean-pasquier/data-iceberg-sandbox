@@ -1,0 +1,23 @@
+services:
+
+  pykafka:
+    build:
+      context: "../etl"
+      args:
+        - DEPENDENCY_GROUP=streaming-app
+    command:
+      - /app/src/apps/stream_transaction/produce_transactions.py
+      - --every_sec
+      - "0.001"
+      - --max_per_loop
+      - "20"
+      - -min
+      - "100"
+      - -max
+      - "500"
+    environment:
+      - KAFKA_BROKERS=kafka:9092
+      - SCHEMA_REGISTRY_URL=http://kafka:8081
+    depends_on:
+      kafka:
+        condition: service_healthy

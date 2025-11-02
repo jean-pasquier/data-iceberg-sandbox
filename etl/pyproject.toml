@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "First test of iceberg"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "click>=8.3.0",
+]
 
 [dependency-groups]
 spark-apps = [
@@ -14,6 +16,9 @@ python-apps = [
     "polars>=1.34.0",
     "pyiceberg>=0.10.0",
     "pyarrow>=22.0.0",
+]
+streaming-app = [
+    "confluent-kafka[avro,schemaregistry]>=2.12.1",
 ]
 
 [build-system]

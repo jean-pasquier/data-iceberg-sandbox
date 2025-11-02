@@ -1,0 +1,27 @@
+{
+  "name": "Transaction",
+  "type": "record",
+  "namespace": "com.pasquier.jean",
+  "fields": [
+    {
+      "name": "card_id",
+      "type": "string"
+    },
+    {
+      "name": "amount",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 28,
+        "scale": 4
+      }
+    },
+    {
+      "name": "ts",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-micros"
+      }
+    }
+  ]
+}
