@@ -2,6 +2,8 @@ services:
   pyiceberg:
     build:
       context: "../etl/"
+      args:
+        - DEPENDENCY_GROUP=python-apps
     command:
       - /app/src/apps/analytics/count_clients.py
       - "--read"
