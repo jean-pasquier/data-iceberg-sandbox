@@ -18,6 +18,7 @@ services:
     environment:
       - KAFKA_BROKERS=kafka:9092
       - SCHEMA_REGISTRY_URL=http://kafka:8081
+    restart: on-failure
     depends_on:
       kafka:
         condition: service_healthy
