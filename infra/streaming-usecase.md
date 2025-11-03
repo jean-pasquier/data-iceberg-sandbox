@@ -4,7 +4,7 @@ Test RisingWave features such as storing data, ingest/sink to Kafka & Iceberg an
 
 Reference documentation: [https://docs.risingwave.com/sql/overview](https://docs.risingwave.com/sql/overview)
 
-## 1 Quickstart
+## 1. Quickstart
 
 ```sql
 CREATE SCHEMA finance IF NOT EXISTS;
@@ -72,12 +72,13 @@ VALUES
 ;
 
 /* Should return few alerts */
-SELECT * FROM finance.fraud_alerts LIMIT 100;
+SELECT * FROM finance.fraud_alerts LIMIT 10;
 ```
 
-## 2 Sink the streaming MV to Kafka
+## 2. Sink the streaming MV to Kafka
 
-First register a 'fraud_alerts_avro-value' subject in Kafka schema registry
+First register a `fraud_alerts_avro-value` subject in Kafka schema registry
+<br/>See [confluent doc on schema registry](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#subject-name-strategy)
 
 ```shell
 curl -X POST -H "Content-Type: application/vnd.schemaregistry.v1+json" \
@@ -87,6 +88,9 @@ http://localhost:18081/subjects/sink_frauds_alerts_avro-value/versions?normalize
   "schema": "{\"type\": \"record\", \"name\": \"FraudAlert\", \"namespace\": \"com.pasquier.jean\", \"fields\": [{\"name\": \"card_id\", \"type\": \"string\"}, {\"name\": \"window_start\", \"type\": {\"type\": \"long\", \"logicalType\": \"timestamp-micros\"}}, {\"name\": \"window_end\", \"type\": {\"type\": \"long\", \"logicalType\": \"timestamp-micros\"}}, {\"name\": \"total_amount\", \"type\": {\"type\": \"bytes\", \"logicalType\": \"decimal\", \"precision\": 28}}]}"
 }'
 ```
+
+Sink to kafka will continuously produce results to the topic, can configure producer parameters
+<br/>See [risingwave kafka sink doc](https://docs.risingwave.com/integrations/destinations/apache-kafka#additional-kafka-parameters) 
 
 ```sql
 CREATE SINK finance.kafka_sink_fraud_alerts_avro
@@ -122,7 +126,7 @@ SELECT * FROM finance.kafka_source_fraud_alerts_avro LIMIT 10;
 ```
 
 
-## 3 Sink to Iceberg table
+## 3. Sink to Iceberg table
 
 
 Either create a connection object of type iceberg (preferred way) or specify each parameter while creating iceberg-related risingwave objects (ie sink/source/managed tables)
@@ -164,7 +168,7 @@ WITH (
 Check result in any iceberg query engine (Trino, spark sql, pyiceberg, etc.): `select * from lakekeeper.finance.fraud_alerts;`
 
 
-## 4 Enrich streaming data with customer iceberg data using joins
+## 4. Enrich streaming data with customer iceberg data using joins
 
 
 Create a risingwave source on the spark-generated iceberg clients
@@ -226,14 +230,13 @@ ON co.client_id = c.id
 ```
 
 Inserting records manually into credit_card_transactions is quite boring, lets stream some records through kafka
-<br/>Check `pykafka` that produces transactions to topic avro-transactions.
+<br/>Check `pykafka` that produces transactions to topic `raw_transactions_avro`.
 
 ```sql
-CREATE SOURCE finance.kafka_source_transactions
-
+CREATE SOURCE finance.kafka_source_raw_transactions
 WITH (
     connector = 'kafka',
-    topic = 'avro-transactions',
+    topic = 'raw_transactions_avro',
     properties.bootstrap.server = 'kafka:9092',
     scan.startup.mode = 'earliest',  -- start consuming from the oldest transactions
     properties.statistics.interval.ms = 30000, -- send stats every 30s
