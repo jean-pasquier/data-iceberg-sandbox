@@ -174,5 +174,4 @@ docker compose -f observability-docker-compose.yml -f docker-compose.yml -f kafk
 * risingwave console: [http://localhost:8082/](http://localhost:8082/). Connect with username `root`, password `rootpwd`.
 * grafana dashboard: [http://localhost:3001/dashboards](http://localhost:3001/dashboards). No password needed (not configured yet)
 
-Run the queries in risingwave SQL Console, draft started here: [risingwave console SQL](./risingwave-usecase.sql)
-
+Run queries in risingwave SQL Console, see a [complete streaming use case](./streaming-usecase.md)
