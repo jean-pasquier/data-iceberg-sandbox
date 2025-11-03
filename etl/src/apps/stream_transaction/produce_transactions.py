@@ -1,3 +1,4 @@
+import sys
 import random
 import time
 import decimal
@@ -10,7 +11,6 @@ from confluent_kafka.schema_registry.avro import AvroSerializer
 from confluent_kafka.serialization import StringSerializer, SerializationContext, MessageField
 
 from apps.stream_transaction.utils import BROKERS, schema_registry, read_file, delivery_report
-
 
 TOPIC = "avro-transactions"
 IDS = ("card_123", "card_234", "card_345", "card_456", "card_567", "card_678", "card_789")
@@ -30,7 +30,7 @@ def create_topic():
             "cleanup.policy": "delete",
             "retention.ms": "86400000",  # 1 day
             "segment.ms": "86400000",  # 1 day
-            "segment.bytes": "134217728"  # 128MiB
+            "segment.bytes": "134217728",  # 128MiB
         }
 
         new_topic = NewTopic(TOPIC, num_partitions=6, replication_factor=1, config=config)
@@ -46,10 +46,10 @@ def create_topic():
 
 
 @click.command()
-@click.option('--every_sec', default=0.01, help='Time to wait before another loop.')
-@click.option('--max_per_loop', default=3, help='Max number of records to send at each loop.')
-@click.option('-min', '--min_amount', default=100, help='Minimum amount of transaction.')
-@click.option('-max', '--max_amount', default=100, help='Maximum amount of transaction.')
+@click.option("--every_sec", default=0.01, help="Time to wait before another loop.")
+@click.option("--max_per_loop", default=3, help="Max number of records to send at each loop.")
+@click.option("-min", "--min_amount", default=100, help="Minimum amount of transaction.")
+@click.option("-max", "--max_amount", default=100, help="Maximum amount of transaction.")
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose mode.")
 def start_produce(every_sec: float, max_per_loop, min_amount: int, max_amount: int, verbose: bool = False):
     transaction_schema = read_file("transaction.avsc")
@@ -63,28 +63,40 @@ def start_produce(every_sec: float, max_per_loop, min_amount: int, max_amount: i
     )
     key_str_serializer = StringSerializer("utf_8")
 
-    # Wait 200ms or 100 records to send micro batch
-    config = {"bootstrap.servers": BROKERS, "linger.ms": "200", "batch.size": "100", "acks": "1"}
+    # Wait 200ms or 500 records to send micro batch
+    config = {
+        "bootstrap.servers": BROKERS,
+        "linger.ms": "200",
+        "batch.size": "500",
+        "acks": "1",
+        "request.timeout.ms": "60000",  # 1 min
+        "delivery.timeout.ms": "300000",  # 5 min
+        "queue.buffering.max.messages": "100000",
+    }
     producer = Producer(config)
 
-    click.echo(f"Starting producing 0 to {max_per_loop/every_sec:.2f} transactions/sec ({every_sec=} {max_per_loop=})")
-    click.echo(f"Configuration: {config}")
+    click.echo(
+        f"Starting producing randomly between 0 and {max_per_loop / every_sec:.2f} transactions/sec ({every_sec=}, {max_per_loop=})"
+    )
+    click.echo(f"Producer configuration: {config}")
+
+    n_loops = 1
 
     while True:
         try:
-            producer.poll(0.0)
-
             transactions = [
                 {
                     "card_id": random.choice(IDS),
-                    "amount": round(decimal.Decimal(random.randrange(min_amount, max_amount) + random.random() * 100), 4),
+                    "amount": round(
+                        decimal.Decimal(random.randrange(min_amount, max_amount) + random.random() * 100), 4
+                    ),
                     "ts": datetime.now(),
                 }
                 for _ in range(random.randint(0, max_per_loop))
             ]
 
             if verbose:
-                click.echo(f"Generated {len(transactions)}:", transactions)
+                click.echo(f"Generated {len(transactions)}: {transactions}")
 
             for t in transactions:
                 producer.produce(
@@ -93,8 +105,19 @@ def start_produce(every_sec: float, max_per_loop, min_amount: int, max_amount: i
                     value=value_avro_serializer(t, SerializationContext(TOPIC, MessageField.VALUE)),
                     on_delivery=delivery_report,
                 )
+            producer.poll(every_sec / 2)  # use half-time to poll
 
-            time.sleep(every_sec)
+            # Frequently flush producer buffer
+            if n_loops % 1000 == 0:
+                click.echo(f"Hitting {n_loops} loops, flushing producer buffer...")
+                producer.flush()
+
+            if n_loops >= sys.maxsize:
+                click.echo(f"Hitting {n_loops} loops, resetting count to 0...")
+                n_loops = 0
+
+            time.sleep(every_sec / 2)  # use half-time to sleep
+            n_loops += 1
 
         except KeyboardInterrupt:
             click.echo("Producer stopped: flushing")
@@ -103,6 +126,5 @@ def start_produce(every_sec: float, max_per_loop, min_amount: int, max_amount: i
 
 
 if __name__ == "__main__":
-
     create_topic()
     start_produce()

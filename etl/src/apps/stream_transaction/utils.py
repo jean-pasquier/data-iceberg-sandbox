@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+
+import click
 from confluent_kafka.schema_registry import SchemaRegistryClient
 
 
@@ -13,8 +15,7 @@ def read_file(path: str) -> str:
 
 def delivery_report(err, msg):
     if err is not None:
-        print(f"Delivery failed for record {msg.key()}: {err}")
-        return
+        click.echo(f"Delivery failed for record {msg.key()}: {err}")
 
 
 schema_registry = SchemaRegistryClient({"url": SCHEMA_URL})
