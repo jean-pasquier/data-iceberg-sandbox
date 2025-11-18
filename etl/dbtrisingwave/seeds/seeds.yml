@@ -1,0 +1,10 @@
+seeds:
+  - name: credit_card_ownership
+    config:
+      schema: finance
+    delimiter: ','
+    columns:
+      - name: card_id
+        type: varchar(8)
+      - name: client_id
+        type: bigint

@@ -20,6 +20,9 @@ python-apps = [
 streaming-app = [
     "confluent-kafka[avro,schemaregistry]>=2.12.1",
 ]
+dbt-risingwave = [
+    "dbt-risingwave>=1.9.7",
+]
 
 [build-system]
 requires = ["uv_build>=0.9.2,<0.10.0"]
