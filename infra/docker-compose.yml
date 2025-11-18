@@ -12,7 +12,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=postgres
-      # create one user:password/db for each following services
+      # create one user:password/db for each following service
       - POSTGRES_DATABASES=openfga,keycloak,lakekeeper,nimtable,risingwave,rwconsole
     volumes:
       - postgres:/var/lib/postgresql/data
@@ -31,6 +31,9 @@ services:
   ### Services connects to pgbouncer host (port 6432) instead of postgres
   pgbouncer:
     image: edoburu/pgbouncer:v1.24.1-p1
+    environment:
+      PGBOUNCER_CONF_FILE: /etc/pgbouncer/pgbouncer.ini
+      PGBOUNCER_AUTH_FILE: /etc/pgbouncer/userlist.txt
     volumes:
       - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
       - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
