@@ -6,43 +6,14 @@ from datetime import datetime
 
 import click
 from confluent_kafka import Producer
-from confluent_kafka.admin import AdminClient, NewTopic, NewPartitions
 from confluent_kafka.schema_registry.avro import AvroSerializer
 from confluent_kafka.serialization import StringSerializer, SerializationContext, MessageField
 
-from apps.stream_transaction.utils import BROKERS, schema_registry, read_file, delivery_report
+from apps.stream_transaction.utils import BROKERS, DEFAULT_TOPIC_CONFIG, schema_registry, read_file, delivery_report, _create_topic
 
 TOPIC = "avro-transactions"
 IDS = ("card_123", "card_234", "card_345", "card_456", "card_567", "card_678", "card_789")
 
-
-def create_topic():
-    admin = AdminClient({"bootstrap.servers": BROKERS})
-
-    cluster_metadata = admin.list_topics()
-
-    click.echo(f"Existing topics: {cluster_metadata.topics.keys()}")
-
-    if TOPIC not in cluster_metadata.topics:
-        click.echo(f"Assuming topic {TOPIC} does not exist")
-
-        config = {
-            "cleanup.policy": "delete",
-            "retention.ms": "86400000",  # 1 day
-            "segment.ms": "86400000",  # 1 day
-            "segment.bytes": "134217728",  # 128MiB
-        }
-
-        new_topic = NewTopic(TOPIC, num_partitions=6, replication_factor=1, config=config)
-        click.echo(f"Topic creation spec: {new_topic}")
-
-        futures = admin.create_topics(new_topics=[new_topic])  # dict[topic name, future]
-        click.echo(f"Create topic request result: {futures[TOPIC].result()}")
-    else:
-        click.echo(f"Topic {TOPIC} already exists")
-        # new_partitions = NewPartitions(topic=TOPIC, new_total_count=6)
-        # futures = admin.create_partitions(new_partitions=[new_partitions])
-        # click.echo(f"Create partitions request result: {futures[TOPIC].result()}")
 
 
 @click.command()
@@ -126,5 +97,5 @@ def start_produce(every_sec: float, max_per_loop, min_amount: int, max_amount: i
 
 
 if __name__ == "__main__":
-    create_topic()
+    _create_topic(TOPIC, DEFAULT_TOPIC_CONFIG)
     start_produce()
