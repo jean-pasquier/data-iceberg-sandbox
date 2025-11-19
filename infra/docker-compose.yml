@@ -53,6 +53,7 @@ services:
 
   openfga-migrate:
     image: openfga/openfga:v1.8
+    restart: on-failure
     command: migrate
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
@@ -85,7 +86,7 @@ services:
   ### Keycloak ###
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0.7
+    image: quay.io/keycloak/keycloak:26.4.5
     restart: on-failure
     environment:
       - KC_BOOTSTRAP_ADMIN_USERNAME=admin
@@ -246,11 +247,15 @@ services:
               ]
             }";
       
-      echo "Assigning project permission to admin user";
+      echo "Assigning project permission to admin user & few service principals";
       curl -s -X POST "http://lakekeeper:8181/management/v1/permissions/project/assignments" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $$ACCESS_TOKEN" \
-        -d "{\"writes\": [{\"user\": \"oidc~7ff741f3-8ace-44b0-bb79-2bb48cf0cd3a\", \"type\": \"project_admin\"}]}";
+        -d "{\"writes\": [
+            {\"user\": \"oidc~7ff741f3-8ace-44b0-bb79-2bb48cf0cd3a\", \"type\": \"project_admin\"},
+            {\"user\": \"oidc~1b0bdc51-98c4-44d4-8bca-1b295aa2568c\", \"type\": \"data_admin\"},
+            {\"user\": \"oidc~94eb1d88-7854-43a0-b517-a75f92c533a5\", \"type\": \"data_admin\"}
+          ]}";
       
       echo "Creating first iceberg warehouse";
       WAREHOUSE_ID=$(curl -s -X POST "http://lakekeeper:8181/management/v1/warehouse" \
