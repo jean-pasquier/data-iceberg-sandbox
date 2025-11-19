@@ -40,7 +40,7 @@ cd ../../infra && docker compose -f kafka-docker-compose.yml -f pykafka-docker-c
 
 # Upload its schema on Kafka schema registry
 curl -X POST -H "Content-Type: application/vnd.schemaregistry.v1+json" \
-  http://localhost:18081/subjects/${TOPIC}-value/versions?normalize=true&format=resolved \
+  http://localhost:18081/subjects/$TOPIC-value/versions?normalize=true&format=resolved \
   --data '{
     "schemaType": "AVRO",
     "schema": "{\"type\": \"record\",\"name\": \"FraudAlertClient\",\"namespace\": \"com.pasquier.jean\",\"fields\": [{\"name\": \"client_id\",\"type\": \"long\"},{\"name\": \"client_name\",\"type\": \"string\"},{\"name\": \"client_category\",\"type\": \"string\"},{\"name\": \"card_id\",\"type\": \"string\"},{\"name\": \"window_start\",\"type\": {\"type\": \"long\",\"logicalType\": \"timestamp-micros\"}},{\"name\": \"window_end\",\"type\": {\"type\": \"long\",\"logicalType\": \"timestamp-micros\"}},{\"name\": \"total_amount\",\"type\": {\"type\": \"bytes\",\"logicalType\": \"decimal\",\"precision\": 28}}]}"
@@ -74,7 +74,7 @@ cd ../ && uv sync --all-groups && source .venv/bin/activate && cd ./dbtrisingwav
 # SQL commands run inside risingwave that is running in docker, so we can use docker compose hostnames
 export LAKEKEEPER_CATALOG_URI="http://lakekeeper:8181/catalog"
 export KEYCLOAK_TOKEN_ENDPOINT="http://keycloak:8080/realms/iceberg/protocol/openid-connect/token"
-export KAFKA_BROKERS="kafka:19092"
+export KAFKA_BROKERS="kafka:9092"
 export SCHEMA_REGISTRY_URL="http://kafka:8081"
 
 # Compile SQL commands
