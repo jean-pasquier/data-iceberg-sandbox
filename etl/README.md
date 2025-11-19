@@ -21,6 +21,11 @@ Write into Iceberg table: see `src/apps/load_people/create_table.py` with method
 Load data and play with any pyarrow compatible lib, here polars. See `src/apps/analytics/count_clients.py`
 
 
+## Produce data to Kafka
+
+Python kafka producer: see `src/apps/stream_transaction/produce_transactions.py`
+
+
 ## Stream data with Risingwave using dbt
 
 

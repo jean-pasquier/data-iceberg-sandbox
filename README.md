@@ -27,27 +27,29 @@ docker compose -f observability-docker-compose.yml -f docker-compose.yml -f nimt
 * Kafka
 * RisingWave
 
-And some python or pyspark ETL with some code ready to run:
+And some python applications ready to run:
 
 ```shell
 docker compose -f pyspark-docker-compose.yml run --build pyspark ./bin/spark-sql --help
-docker compose -f pyiceberg-docker-compose.yml run --build pyiceberg
+docker compose -f pyiceberg-docker-compose.yml run --build pyiceberg --help
+docker compose -f pyiceberg-docker-compose.yml run --build pykafka --help
 ```
 
 * PySpark
 * PyIceberg
+* Python confluent-kafka
 
 See [Playing with the data](#playing-with-the-data)
 
 
 ### Step-by-step guide
 
-See complete scenario with user & data management on [infra](./infra/README.md)
+See the complete scenario with user and data management on [infra](./infra/README.md)
 
 
 ## Playing with the data
 
-Play with the data using PySpark or pyiceberg, see [etl](./etl/README.md)
+Play with the data by batch and streaming using PySpark, pyiceberg, kafka and Risingwave, see [etl](./etl/README.md)
 
 
 ## Next steps
@@ -61,7 +63,7 @@ Play with the data using PySpark or pyiceberg, see [etl](./etl/README.md)
 
 ## Acknowledgements
 
-Inspired by: 
+Inspired by:
 * Lakekeeper [advanced control example](https://github.com/lakekeeper/lakekeeper/tree/main/examples/access-control-advanced)
 * RisingWave [quickstart](https://docs.risingwave.com/get-started/quickstart)
 * RisingWave [Iceberg article on Medium](https://blog.dataengineerthings.org/we-built-an-open-source-s3-tables-alternative-2b3c95ef4b3a)
